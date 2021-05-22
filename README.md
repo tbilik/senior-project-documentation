@@ -2,6 +2,8 @@
 
 This is the documentation for my ASD senior project. I worked on a prototype that would detect and classify traffic signs, and would detect speeding with the vehicle diagnostics system (OBD-II).
 
+![Monkey](monkey.gif)
+
 ## Parts Used
 
 ## The Nvidia Jetson Nano
@@ -58,6 +60,18 @@ Disk /dev/mapper/cryptswap: 4 GiB, 4294442496 bytes, 8387583 sectors
 Units: sectors of 1 * 512 = 512 bytes
 Sector size (logical/physical): 512 bytes / 512 bytes
 I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+Disk /dev/sda: 29.72 GiB, 31914983424 bytes, 62333952 sectors
+Disk model: SD  Transcend   
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: 4E39CA32-5E71-B640-93C7-8F1F7505F649
+
+Device     Start      End  Sectors  Size Type
+/dev/sda1   2048 62333918 62331871 29.7G Linux filesystem
 ```
 
 In this case, the SD card is recognized as `/dev/sda`. Make absolutely sure you're accessing the right device! Now you can unzip and flash:
@@ -74,11 +88,27 @@ Once flashed, you can take the SD card out and put in into the Jetson Nano. I di
 ssh tbilik@192.168.55.1
 ```
 
-TRAMP mode in GNU/Emacs also works great! I did most coding and file management with GNU/Emacs for my project. (Here's a guide for setting up TRAMP mode.)[https://www.emacswiki.org/emacs/TrampMode]
+TRAMP mode in GNU/Emacs also works great! I did most coding and file management with GNU/Emacs for my project. [Here's a guide for setting up TRAMP mode.](https://www.emacswiki.org/emacs/TrampMode)
 
 ## My Object Detection Model
 
+There are several frameworks for machine learning object detection algorithms. Region proposal based frameworks and regression/classification based frameworks are the two main categories of frameworks. Region proposal based frameworks have a more general pipeline in the beginning of the section: the framework generates various image windows to test, and then it classifies the image windows. The most popular framework in the category is the R-CNN framework. Given an image, the R-CNN generates approximately 2,000 image windows to test using a selective search algorithm. It warps and re-scales the image windows with objects detected to fit in a 227 by 227 image. The re-scaling is a requirement for the neural network that classifies the windows. The selective search algorithm can produce redundant windows (two windows that contain the same object), and the rescaling process can be time-consuming. Other frameworks, such as Fast R-CNN and Faster R-CNN, use different search algorithms along with classifiers that allow for multiple aspect ratios, but otherwise work similarly to R-CNN.
+
+Regression/classification based frameworks don’t use the general pipeline that region proposal based frameworks do and are informally known as “one-step” frameworks. YOLO and SSD are the most famous frameworks in this category. YOLO, developed by Joseph Redmon, applies a fixed grid onto an image. YOLO then uses a convolutional neural network to determine whether a gridbox contains an object with a reported level of confidence. It also generates class-specific confidence scores. With the confidence map, it then generates the bounds of the region. SSD, developed by Wei Liu, works in a similar manner to YOLO, but allows for multiple variable grids instead of a single fixed grid. This improves both speed and accuracy, and is therefore preferred over YOLO in most applications. Both frameworks struggle with detecting small objects compared to region proposal based frameworks, but SSD and YOLO can accomplish higher speeds. When doing on-the-fly object detection in live video feeds, regression/classification based frameworks are often the better choice.
+
+For my project, I used the SSD framework, and trained it on the [traffic sign data set from the Open Images Dataset V6](https://storage.googleapis.com/openimages/web/visualizer/index.html?set=train&type=detection&c=%2Fm%2F01mqdt). The training process is detailed below, but my trained model can be found in my [jetson inference repository](https://github.com/tbilik/jetson-inference). Here are some example test images.
+
+![Object Detection Example 1](ssd-1.png)
+![Object Detection Example 2](ssd-2.png)
+![Object Detection Example 3](ssd-3.png)
+
 ## Object Detection Model Training
+
+The first necessary to training the model is to download and compile the jetson inference libraries. These libraries allow for the usage of classification models, object detection models, and semantic segmentation models in Python/C++. [Nvidia has a good guide on how to set this up](https://github.com/dusty-nv/jetson-inference/blob/master/docs/building-repo-2.md), so I'm not going to delve into many details in this documentation.
+
+When you're at the "download models" screen of the build process, make sure to select "SSD-Mobilenet-V2" from the object detection models list.
+
+![Object Detection Models](model-downloader.png)
 
 ## Classification Model (Attempt)
 
@@ -88,10 +118,34 @@ TRAMP mode in GNU/Emacs also works great! I did most coding and file management 
 
 ## Developing a Power Supply for a Vehicle
 
+I couldn't find a convenient power supply on the market that could supply the power needed from a vehicle to the Jetson Nano. Most USB power supplies for vehicles don't output enough power. Whether you're tapping into the cigarette lighter port, the fuse box, or the radio head unit, it will output approximately 12 Volts, plus or minus 2 Volts. I decided to tap into the power from the cigarette lighter plug, as it's the most convenient. In my car, the fusebox is located near the door hinge, so it's an inconvenient power source. I used an adapter that broke out the power and ground connections from the cigarrete lighter plug, and soldered that to a buck converter that steps down the power to 5 Volts. It outputs a maximum of 3 Amps, which seems to be enough in my case. If you're hooking up more peripherals or equipment to the Jetson Nano, you may need a 4 Amp buck converter.
+
+For non-USB power, the Jetson Nano can be powered with the barrel jack or with the power and ground connections on the GPIO layout. Using the barrel jack looks cleaner aesthetically, so I opted to do that. I used a cable that took the power and ground connections from the buck converter and outputed the power through a 5.5x2.5mm barrel jack.
+
+The wire-to-wire soldering is relatively straightforward. Solder the red and black wires from the cigarette light plug adapter to the red and black wires of the buck converter input. Solder the red and black wires of the barrel jack cable to the yellow and black wires of the buck converter output. Make sure you're using heatshrinks to cover up the solder joints, assuming you don't want to short the car battery! The end result should look something like this:
+
 ## Enabling PWM on the Jetson Nano
+
+Pulse Width Modulation (PWM) creates a [square wave digital signal](https://www.analogictips.com/pulse-width-modulation-pwm/). This allows for controlling brightness of an LED, changing the frequency of a passive buzzer, etc. The Jetson Nano doesn't have any software PWM and only has hardware PWM on two pins. Hardware PWM isn't enabled by default, though. Annoyingly, the hardware PWM will quietly not work in its disabled state. It doesn't throw an error, permission denied, etc. It initially made me think there was an issue with my carrier board when I tried to use it and it didn't work! Anyways, to enable it, run the following:
+
+```
+sudo /opt/nvidia/jetson-io/jetson-io.py
+```
+
+Select "configure Jetson for compatible hardware" in the command line menu. You should be brought to a screen that looks like this:
+
+[Jetson Expansion Screen](jetson-expansion.png)
+
+Enable pwm0 and pwm2 in this menu. You can then hit "back" on the menu, and then select "save and reboot to reconfigure pins". Once rebooted, PWM should be good to go! If you want to do some tests with LEDs, [Paul McWhorter has a good video explaining this all.](https://www.youtube.com/watch?v=eImDQ0PVu2Y)
 
 ## OBD-II: Preparation
 
 ## OBD-II: Connection
 
+## Getting the code
+
 ## Setting up a cronjob
+
+## Project Improvements
+
+## Thanks
