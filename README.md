@@ -154,4 +154,6 @@ Enable pwm0 and pwm2 in this menu. You can then hit "back" on the menu, and then
 
 ## Project Improvements
 
-## Thanks
+## Thanks!
+
+![Ron Paul Gif](ronpaul.gif)
