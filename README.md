@@ -1,4 +1,4 @@
-# Senior Project Presentation
+# Senior Project Documentation
 
 This is the documentation for my ASD senior project. I worked on a prototype that would detect and classify traffic signs, and would detect speeding with the vehicle diagnostics system (OBD-II).
 
@@ -90,6 +90,8 @@ ssh tbilik@192.168.55.1
 
 TRAMP mode in GNU/Emacs also works great! I did most coding and file management with GNU/Emacs for my project. [Here's a guide for setting up TRAMP mode.](https://www.emacswiki.org/emacs/TrampMode)
 
+![Dev Setup](dev-setup.png)
+
 ## My Object Detection Model
 
 There are several frameworks for machine learning object detection algorithms. Region proposal based frameworks and regression/classification based frameworks are the two main categories of frameworks. Region proposal based frameworks have a more general pipeline in the beginning of the section: the framework generates various image windows to test, and then it classifies the image windows. The most popular framework in the category is the R-CNN framework. Given an image, the R-CNN generates approximately 2,000 image windows to test using a selective search algorithm. It warps and re-scales the image windows with objects detected to fit in a 227 by 227 image. The re-scaling is a requirement for the neural network that classifies the windows. The selective search algorithm can produce redundant windows (two windows that contain the same object), and the rescaling process can be time-consuming. Other frameworks, such as Fast R-CNN and Faster R-CNN, use different search algorithms along with classifiers that allow for multiple aspect ratios, but otherwise work similarly to R-CNN.
@@ -109,6 +111,10 @@ The first necessary to training the model is to download and compile the jetson 
 When you're at the "download models" screen of the build process, make sure to select "SSD-Mobilenet-V2" from the object detection models list.
 
 ![Object Detection Models](model-downloader.png)
+
+Make sure to install PyTorch too! This will be necessary for training.
+
+![PyTorch](pytorch-install.png)
 
 ## Classification Model (Attempt)
 
@@ -134,7 +140,7 @@ sudo /opt/nvidia/jetson-io/jetson-io.py
 
 Select "configure Jetson for compatible hardware" in the command line menu. You should be brought to a screen that looks like this:
 
-[Jetson Expansion Screen](jetson-expansion.png)
+![Jetson Expansion Screen](jetson-expansion.png)
 
 Enable pwm0 and pwm2 in this menu. You can then hit "back" on the menu, and then select "save and reboot to reconfigure pins". Once rebooted, PWM should be good to go! If you want to do some tests with LEDs, [Paul McWhorter has a good video explaining this all.](https://www.youtube.com/watch?v=eImDQ0PVu2Y)
 
