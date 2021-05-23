@@ -12,7 +12,7 @@ The Nvidia Jetson Nano is the board I decided to use for my senior project. It h
 
 ![Jetson Nano Image](./jetson_nano.jpg)
 
-## Physical Assembly
+## Physical Assembly and Design
 
 ## OS Installation
 
@@ -98,7 +98,7 @@ There are several frameworks for machine learning object detection algorithms. R
 
 Regression/classification based frameworks don’t use the general pipeline that region proposal based frameworks do and are informally known as “one-step” frameworks. YOLO and SSD are the most famous frameworks in this category. YOLO, developed by Joseph Redmon, applies a fixed grid onto an image. YOLO then uses a convolutional neural network to determine whether a gridbox contains an object with a reported level of confidence. It also generates class-specific confidence scores. With the confidence map, it then generates the bounds of the region. SSD, developed by Wei Liu, works in a similar manner to YOLO, but allows for multiple variable grids instead of a single fixed grid. This improves both speed and accuracy, and is therefore preferred over YOLO in most applications. Both frameworks struggle with detecting small objects compared to region proposal based frameworks, but SSD and YOLO can accomplish higher speeds. When doing on-the-fly object detection in live video feeds, regression/classification based frameworks are often the better choice.
 
-For my project, I used the SSD framework, and trained it on the [traffic sign data set from the Open Images Dataset V6](https://storage.googleapis.com/openimages/web/visualizer/index.html?set=train&type=detection&c=%2Fm%2F01mqdt). The training process is detailed below, but my trained model can be found in my [jetson inference repository](https://github.com/tbilik/jetson-inference). Here are some example test images.
+For my project, I used the SSD framework, and trained it on the [traffic sign data set from the Open Images Dataset V6](https://storage.googleapis.com/openimages/web/visualizer/index.html?set=train&type=detection&c=%2Fm%2F01mqdt). The training process is detailed below. Here are some example test images.
 
 ![Object Detection Example 1](ssd-1.png)
 ![Object Detection Example 2](ssd-2.png)
@@ -106,7 +106,7 @@ For my project, I used the SSD framework, and trained it on the [traffic sign da
 
 ## Object Detection Model Training
 
-The first necessary to training the model is to download and compile the jetson inference libraries. These libraries allow for the usage of classification models, object detection models, and semantic segmentation models in Python/C++. [Nvidia has a good guide on how to set this up](https://github.com/dusty-nv/jetson-inference/blob/master/docs/building-repo-2.md), so I'm not going to delve into many details in this documentation.
+The first necessary to training the model is to download and compile the jetson inference libraries and tools. These libraries allow for the usage of classification models, object detection models, and semantic segmentation models in Python/C++. The tools are useful for downloading the dataset and training. [Nvidia has a good guide on how to set this up](https://github.com/dusty-nv/jetson-inference/blob/master/docs/building-repo-2.md), so I'm not going to delve into many details in this documentation.
 
 When you're at the "download models" screen of the build process, make sure to select "SSD-Mobilenet-V2" from the object detection models list.
 
@@ -116,11 +116,86 @@ Make sure to install PyTorch too! This will be necessary for training.
 
 ![PyTorch](pytorch-install.png)
 
+Nvidia provides a tool to fetch data from the Open Images resources, so use that to fetch the traffic sign dataset.
+
+```
+$ python3 open_images_downloader.py --class-names "Traffic sign" --data=data/signs
+```
+
+Before training, it's important to setup a Swap partition. A Swap partition allows for a computer to store data on a drive when it runs out of RAM. Training almost certainly needs all of the RAM and then some on the Jetson Nano (especially the 2GB variant), so a Swap partition is needed to prevent the training from crashing. You can setup a Swap partition on the microSD card, but because of their limited read/write cycles, it's not recommended. An external mechanical drive or flash drive you don't care about works better. Once your external drive is plugged in, find the partition location:
+
+```
+$ sudo fdisk -l
+Disk /dev/sda: 7.5 GiB, 8004829184 bytes, 15634432 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xee75763f
+
+Device     Boot Start      End  Sectors  Size Id Type
+/dev/sda1        2048 15634431 15632384  7.5G 82 Linux swap / Solaris
+```
+
+My Swap partition is located on `/dev/sda1`. I recommend using [cfdisk](https://tldp.org/HOWTO/IBM7248-HOWTO/cfdisk.html) if you need to create a Swap partition. Once it's created, run the following to enable it:
+
+```
+$ sudo mkswap /dev/sda1
+$ sudo swapon /dev/sda1
+```
+
+The Swap partition won't be recognized upon reboot. If you need the Swap partition after reboot, run the `swapon` command. Now for the training!
+
+To train, run the following command.
+
+```
+$ python3 train_ssd.py --data=data/signs --model-dir=models/signs --batch-size=4 --epochs=30
+```
+
+Increasing the number of Epochs will increase the accuracy of the object detection model, but it will also increase training time. Past 30 Epochs, the accuracy returns are diminishing, but feel free to test! I didn't run the training command with `time`, so unfortunately I don't have an exact measure of how long this took. It needed to whole night to train, so I would estimate 8 to 9 hours for 30 Epochs. Increasing batch size will increase parallelization of the training process, but it requires more system resources. Since the RAM is a bottleneck, increasing batch size won't help much. You can also train on another computer with an Nvidia GPU (both training and running inference on the models requires CUDA, which only works on Nvidia GPUs), which would be faster and not require Swap. I don't have a computer with an Nvidia GPU to test though!
+
+The model needs to be converted to the ONNX format to work with my software. This only takes about a minute.
+
+```
+$ python3 onnx_export.py --model-dir=models/signs
+```
+
 ## Classification Model (Attempt)
+
+Being able to detect and localize traffic signs is the first important step. Determining the contents of that sign is the next critical step. I tried to treat this problem as an image classification problem. Perhaps if I created categories for each type of speed limit sign (10, 15, 20, etc), and gathered enough images of each type of traffic sign, I could train a classification model to differentiate traffic signs. However, this worked poorly for a number of reasons.
+
+- There's no existing dataset for this purpose, and making my own was hard! I used Wolfram Mathematica to scrape images of speed limit signs from the web, and annotated images as necessary.
+- In the end, I still had fewer than 100 images per category, which is not enough for an accurate model.
+- There are a lot of categories, and the images between categories are quite similar.
+
+You can find my dataset here, but here is a collage of the dataset for your viewing pleasure.
+
+![Collage](class-collage.png)
+
+When trained on the Resnet-18 classification model for 30 Epochs, I rarely achieved 20 percent confidence in any category when given an image. The example below is a 30 MPH speed limit sign, and the highest confidence level of the classification model was a stop sign at 15 percent (the classification model received the image after the object detection localization crop). Pretty bad!
+
+![classification-confidence](classification-confidence.png)
+
+There are other classification models besides Resnet-18, but accuracy was so bad with Resnet-18 that I highly doubt other classification models would provide enough accuracy gains to be useable.
 
 ## OCR Investigations
 
-## Setting up Tesseract on the Jetson Nano
+When traditional image classification didn't work, I decided to look into optical character recognition. Optical character recognition allows for characters in a image format to be converted to machine-encoded strings. The most popular software for optical character recognition is [Tesseract](https://github.com/tesseract-ocr/tesseract). Hewlett-Packard Laboratories developed Tesseract in 1994 and was maintained by Google from 2006 to 2018. The open-source community currently develops and maintains it. It does use neural networks, but it's not using any GPU acceleration like the object detection and classification models. In particular, it usesthe LSTM (long short-term memory) network model. LSTM is designed for sequences of data, such as speech, video, and writing. I wasn't sure if it would compile and/or run on the Jetson Nano due to CPU architecture differences, but it compiles and runs without issue, from what I've tested.
+
+[I used this resource to build and install Tesseract on the Jetson Nano.](https://tesseract-ocr.github.io/tessdoc/Compiling.html) It's a general setup guide, but there isn't anything you have to do differently for it to compile on the Jetson Nano. Once Tesseract is installed, you need to download a trained model. To fetch the tessdata_best model, run this:
+
+```
+$ cd local/share/tessdata/
+$ wget https://github.com/tesseract-ocr/tessdata_best/blob/master/eng.traineddata
+```
+
+[If you want to know more about the other Tesseract models, check this out.](https://tesseract-ocr.github.io/tessdoc/Data-Files.html). If you're interested in doing some retraining of the OCR (I didn't have the time or data to do retraining), you will need to use tessdata_best.
+
+Even if traditional image classification did work, it would likely struggle with certain types of signs that OCR wouldn't. Here's an example of what I mean.
+
+![Speed limit minimum sign](speed-limit-minimum-sign.jpg)
+
+Even a well-trained image classification model would have low confidence results. Is is a 70 mph speed limit sign, or a 40 speed limit sign? With an OCR, we can fetch the text from the sign, and then use regular expressions to get the speed limit from the text (more on that later).
 
 ## Developing a Power Supply for a Vehicle
 
@@ -144,9 +219,74 @@ Select "configure Jetson for compatible hardware" in the command line menu. You 
 
 Enable pwm0 and pwm2 in this menu. You can then hit "back" on the menu, and then select "save and reboot to reconfigure pins". Once rebooted, PWM should be good to go! If you want to do some tests with LEDs, [Paul McWhorter has a good video explaining this all.](https://www.youtube.com/watch?v=eImDQ0PVu2Y)
 
-## OBD-II: Preparation
+## OBD-II
 
-## OBD-II: Connection
+Of course, to do speeding detection, the speed of the vehicle is necessary. GPS can be used to calculate speed, but I wanted to avoid using GPS for the project. To determine speed without GPS, an interface to the vehicle diagnostics system is needed. The ELM327 by Microchip is a popular and affordable choice for this. It provides a serial interface to fetch Process IDs like vehicle speed, engine speed, engine temperature, etc. There are both USB and Bluetooth variants of the EML327. I have a Bluetooth variant, but I would go with a USB variant if possible. The USB variant is not prone to Bluetooth vulnerabilites, doesn't require a networking card on the Jetson Nano, and will likely be more reliable in the long run.
+
+There is a kernel option that needs to be enabled to use the ELM327. Unfortunately, this means the kernel and kernel modules will need to be re-built from source code. You can check if the kernel option is set with the following command.
+
+```
+$ zcat /proc/config.gz | cat RFCOMM_TTY
+```
+
+If it returns `CONFIG_BT_RFCOMM_TTY=y`, no further preparation is needed. Most likely, it will return `CONFIG_BT_RFCOMM_TTY is not set`, in which case, you will need to proceed.
+
+[Go to this website and find the OS version you installed on the Jetson Nano.](https://developer.nvidia.com/embedded/linux-tegra-archive) Select it, and then copy the link labelled *L4T Driver Package (BSP) Sources*.
+
+![Jetson Sources](sources.png)
+
+Now run the following commands.
+
+```
+$ wget <link>
+$ tar xvf Jetson-Nano-public_sources.tbz2 public_sources/kernel_src.tbz2
+$ mv public_sources/kernel_src.tbz2 .
+$ rm -rf public_sources/
+$ rm Jetson-Nano-public_sources.tbz2
+$ tar xvf ./kernel_src.tbz2
+$ rm kernel_src.tbz2
+```
+
+The kernel code is now extracted.
+
+```
+$ cd ~/kernel/kernel-4.9
+$ zcat /proc/config.gz > .config
+$ echo CONFIG_BT_RFCOMM_TTY=y >> .config
+```
+
+The kernel is now configured. If there's any configurations you would like to change for the kernel, do so now. If you want to use the menu-based kernel config interface, first install the `libncurses5-dev` dependency and then run `make menuconfig`. The commands below will build the kernel.
+
+```
+$ make prepare
+$ make modules_prepare
+$ make -j5 Image
+$ make -j5 modules
+```
+
+Building the kernel and the kernel modules takes about an hour altogether, although build time varies based on any configurations you changed. Once your ready to install the kernel, run the following.
+
+```
+$ sudo cp /boot/Image /boot/Image.original
+$ sudo make modules_install
+$ sudo cp arch/arm64/boot/Image /boot/Image
+```
+
+This creates a backup kernel in the boot directory titled `Image.original`. If your Jetson Nano fails to boot after installing the new kernel, take the SD card out of the Jetson Nano, put it in your computer, and rename `Image.original` to `Image`. Unfortunately, the Jetson Nano doesn't use the GRUB bootloader, so switching between kernels is cumbersome.
+
+Once the kernel is all set, we can actually connect the ELM327! If you're using a Bluetooth variant, you will need to connect with `bluetoothctl`.
+
+```
+$ sudo rfkill unblock all
+$ sudo bluetoothctl
+[bluetooth]# power on
+[bluetooth]# agent on
+[bluetooth]# scan on
+[NEW] Device 40:D2:A4:02:F9:0B OBDII
+[bluetooth]# pair 40:D2:A4:02:F9:0B
+```
+
+The `pair` command will likely ask for a pin, which is normally `1234`. Once the pairing is complete, you can quit `bluetoothctl` with the `exit` command.
 
 ## Getting the code
 
