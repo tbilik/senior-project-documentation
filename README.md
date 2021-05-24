@@ -6,13 +6,43 @@ This is the documentation for my ASD senior project. I worked on a prototype tha
 
 ## Parts Used
 
+- Nvidia Jetson Nano
+- Adafruit 7-segment display
+- Passive buzzer
+- Black acryllic case
+- Intel 9260 wireless card
+- 5V 3A buck converter
+- 32 GB SD card (I would recommend 64 GB though)
+- 160 degree angle range CSI camera
+
 ## The Nvidia Jetson Nano
 
 The Nvidia Jetson Nano is the board I decided to use for my senior project. It has a much more powerful GPU than the Raspberry Pi, and therefore works well in GPU-intensive applications, such as machine learning. The Nvidia Jetson Nano isn't a technically a single board computer, as it has two components: the carrier board and the compute/system on a chip (SoC) module. It does share the same 40 pin GPIO layout as the Raspberry Pi, but the current output is lower, and Hardware Pulse Width Modulation (PWM) is disabled by default. A networking card is needed to wireless connectivity and Bluetooth. It can run off of USB power, but it will only draw up to 2 Amps through USB. The SoC module itself requires 2 Amps to run without throttling performance, so ideally the board needs about 3 Amps, as the carrier board requires additional power. The Jetson Nano can run Nvidia's JetPack software, which is based on Ubuntu 18.04. The Jetson Nano Developer Kit boots from a MicroSD, similar to a Raspberry Pi and other single board computers. 
 
 ![Jetson Nano Image](./jetson_nano.jpg)
 
-## Physical Assembly and Design
+## Physical Assembly and Design of my Prototype
+
+Front of the prototype contains the 7-segment display.
+
+![front](front.jpg)
+
+The left side of the prototype has the ports and barrel jack power, and the right side of the prototype has antennas for the networking card. The networking card is only needed for the ELM327 OBD-II adapter.
+
+![left](left.jpg)
+![right](right.jpg)
+
+The back of the prototype contains the camera module.
+
+![back](back.jpg)
+
+The top of the prototype has the heat sink, power button, reset button (which is actually hooked up to the GPIO pins to act as a regular button), and a passive buzzer.
+
+![top](top.jpg)
+
+Here is all of the wiring. The display is hooked up to pins 3 and 5, the buzzer is connected to pin 32, and the reset button is hooked up to pin 19. Even though pin 19 has an interal pull-down resistor, it still seemed to be floating, so I put a 330 ohm resistor from pin 19 to ground.
+
+![wiring](wiring.jpg)
 
 ## OS Installation
 
@@ -168,7 +198,7 @@ Being able to detect and localize traffic signs is the first important step. Det
 - In the end, I still had fewer than 100 images per category, which is not enough for an accurate model.
 - There are a lot of categories, and the images between categories are quite similar.
 
-You can find my dataset here, but here is a collage of the dataset for your viewing pleasure.
+[You can find my dataset here](https://github.com), but here is a collage of the dataset for your viewing pleasure.
 
 ![Collage](class-collage.png)
 
@@ -204,6 +234,8 @@ I couldn't find a convenient power supply on the market that could supply the po
 For non-USB power, the Jetson Nano can be powered with the barrel jack or with the power and ground connections on the GPIO layout. Using the barrel jack looks cleaner aesthetically, so I opted to do that. I used a cable that took the power and ground connections from the buck converter and outputed the power through a 5.5x2.5mm barrel jack.
 
 The wire-to-wire soldering is relatively straightforward. Solder the red and black wires from the cigarette light plug adapter to the red and black wires of the buck converter input. Solder the red and black wires of the barrel jack cable to the yellow and black wires of the buck converter output. Make sure you're using heatshrinks to cover up the solder joints, assuming you don't want to short the car battery! The end result should look something like this:
+
+![power supply](power_supply.jpg)
 
 ## Enabling PWM on the Jetson Nano
 
@@ -286,14 +318,98 @@ $ sudo bluetoothctl
 [bluetooth]# pair 40:D2:A4:02:F9:0B
 ```
 
-The `pair` command will likely ask for a pin, which is normally `1234`. Once the pairing is complete, you can quit `bluetoothctl` with the `exit` command.
+The `pair` command will likely ask for a pin, which is normally `1234`. Once the pairing is complete, you can quit `bluetoothctl` with the `exit` command. To connect the paired device, run the following command.
 
-## Getting the code
+```
+$ sudo rfcomm bind 0 40:D2:A4:02:F9:0B 1 &
+```
 
-## Setting up a cronjob
+Now everything is set for my `obdii.py` program!
+
+## Misc Setup Stuff
+
+To get my code, clone my code repository.
+
+```
+$ git clone https://github.com/tbilik/jetson-code
+```
+
+For my programs to work, you will need to create a FIFO file labelled `display_fifo`.
+
+```
+$ mkfifo display_fifo
+```
+
+Download all of the python modules needed.
+
+```
+$ sudo su
+# pip3 install sixel adafruit-blinka adafruit-circuitpython-ht16k33
+# pip3 install git+https://github.com/brendan-w/python-OBD.git#egg=python-OBD
+```
+
+To run my programs on startup, a cronjob is needed.
+
+```
+$ sudo crontab -e
+```
+
+It will ask for your favorite editor, and then it will go to the cronjob file. Add the following line.
+
+```
+@reboot /home/tbilik/jetson-code/startup.sh
+```
+
+You can put anything else you want to start at boot here. Just prefix it with `@reboot` like I did above. Also, modify the `startup.sh` script with the address of your ELM327 device. Make sure the cron daemon is enabled on startup.
+
+```
+$ sudo systemctl enable cron.service
+```
+
+You can also disable LightDM to save some system resources. Disabling LightDM means you will be put into the CLI at boot, but you can always activate the GUI with `startx`.
+
+```
+$ sudo systemctl disable lightdm.service
+```
+
+## Code Overview
+
+There are three Python programs in my [code repository](https://github.com/tbilik/jetson-code): `display_driver.py`, `sign-detect.py`, and `obdii.py`. 
+
+Let's start with the simple one: `obdii.py`. `obdii.py` uses [Brendan W's library](https://github.com/brendan-w/python-OBD/) to connect with the ELM327 and fetch the speed of the vehicle. It's converted to miles per hour and then is printed to `display_fifo` prefixed with an `A`. It polls the ELM327 once a second.
+
+The name of `display_driver.py` is slightly misleading. It does indeed control the 7-segment display, but it also controls the buzzer and reset button. `display_driver.py` gets vehicle speed and speed limit data through the FIFO. As mentioned above, data prefixed with an A is vehicle speed. Data prefixed with a B is a speed limit (this data is provided by `sign-detect.py`). The vehicle speed is put on the left two digits of the 7-segment display, and the speed limit is put on the right two digits of the 7-segment display. If the speed of the vehicle is 10 miles per hour or more over the speed limit, the buzzer is activated at a frequency of 2000 Hz. It's not loud, but not easy to ignore either haha. Pressing the reset button will disable the buzzer.
+
+Finally, there's `sign-detect.py`. There's a few different modes for this program, depending on the image/video input. If `camera` is the argument provided, it will use the CSI camera as input. If a file is the argument provided, it will use that file as input. If no argument is provided, it will run in demo mode, which will prompt the user for a file.
+
+Once a frame or image is loaded, it will be ran through the object detection model. If object(s) are detected, that frame will be converted from RGB to grayscale. The grayscale image is then cropped to the region of interest. More specifically, it does a 90% center crop of the region of interest, since that often removes the borders of the speed limit sign. Finally, the image is binarized. The program then forks. The child process runs the image through the OCR, while the parent process keeps processing frames.
+
+Once the OCR outputs text, the child process runs the text through a regular expression. The regular expression is `(?i)SPEED(.*)LIMIT(.*)\d\d`, which means that it looks for the word "SPEED", followed by "LIMIT", followed by two digits. The pattern is still met if there are characters between SPEED and LIMIT or LIMIT and the two digits. `(?i)` disables case insensitivity. If the pattern is met, the numbers are pulled and sent to the FIFO prefixed with a `B`.
+
+A few notes about the demo mode:
+
+- If you put an integer as the input, it will be sent to the FIFO as vehicle speed data.
+- Images are displayed to the terminal via `sixel`. Demo mode also shows the image that will be processed by the OCR. The terminal emulator `mlterm` is needed for `sixel` to work properly. Other methods of displaying an image with a terminal, such as `w3m-img`, don't work over an SSH connection.
+- The parent process will wait for any child processes to finish before continuing in demo mode.
+
+Here's a cool example of demo mode:
+
+![demo mode](demo-mode.png)
+
+The display will then update to show that the speed limit is indeed 30 miles per hour, and if you give it vehicle speed data of over 40 miles per hour, the buzzer will activate.
+
+![demo mode display](demo-mode-display.jpg)
 
 ## Project Improvements
 
+In practice, my prototype works poorly. The camera I use has poor focus and a wide-angle perspective, making it difficult for the object detection model and OCR. I think a camera that had a shorter angle range and better focus would perform much better.
+
+Having some recorded video footage from the camera could also be useful, as it could be used as training data for the object detection model and OCR. You would likely need an external storage device to record video footage. In addition, you may need to use a beefier power supply if the external storage device is a mechanical drive. Programming it to record video while running inference at the same time would be really cool too, as then it could be smart dashcam of sorts!
+
+Although I like the aesthetic of the 7-segment display, it gets washed out easily from sunlight. An e-ink display would likely look much better. You could put more information on an e-ink display too!
+
 ## Thanks!
+
+A quick thank you to Amy Bewley, Scott Bilik, Claire Bilik, and anyone else who helped me with the project. And thank you to reading all the way down this far! 
 
 ![Ron Paul Gif](ronpaul.gif)
