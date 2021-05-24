@@ -14,6 +14,7 @@ This is the documentation for my ASD senior project. I worked on a prototype tha
 - 5V 3A buck converter
 - 32 GB SD card (I would recommend 64 GB though)
 - 160 degree angle range CSI camera
+- ELM327 Adapter
 
 ## The Nvidia Jetson Nano
 
@@ -43,6 +44,11 @@ The top of the prototype has the heat sink, power button, reset button (which is
 Here is all of the wiring. The display is hooked up to pins 3 and 5, the buzzer is connected to pin 32, and the reset button is hooked up to pin 19. Even though pin 19 has an interal pull-down resistor, it still seemed to be floating, so I put a 330 ohm resistor from pin 19 to ground.
 
 ![wiring](wiring.jpg)
+
+Some photos of the prototype operating in my car.
+
+![Car Pic 1](car-1.jpg)
+![Car Pic 2](car-2.jpg)
 
 ## OS Installation
 
@@ -236,6 +242,7 @@ For non-USB power, the Jetson Nano can be powered with the barrel jack or with t
 The wire-to-wire soldering is relatively straightforward. Solder the red and black wires from the cigarette light plug adapter to the red and black wires of the buck converter input. Solder the red and black wires of the barrel jack cable to the yellow and black wires of the buck converter output. Make sure you're using heatshrinks to cover up the solder joints, assuming you don't want to short the car battery! The end result should look something like this:
 
 ![power supply](power_supply.jpg)
+![power supply 2](power_supply_2.jpg)
 
 ## Enabling PWM on the Jetson Nano
 
@@ -402,11 +409,19 @@ The display will then update to show that the speed limit is indeed 30 miles per
 
 ## Project Improvements
 
-In practice, my prototype works poorly. The camera I use has poor focus and a wide-angle perspective, making it difficult for the object detection model and OCR. I think a camera that had a shorter angle range and better focus would perform much better.
+In practice, my prototype works poorly. The camera I use has mediocre focus and a wide-angle perspective, making it difficult for the object detection model and OCR. I think a camera that had a shorter angle range and better focus would perform much better. Some example shots from my camera:
+
+![cam](camera-1.png)
+![cam](camera-2.png)
+![cam](camera-3.png)
 
 Having some recorded video footage from the camera could also be useful, as it could be used as training data for the object detection model and OCR. You would likely need an external storage device to record video footage. In addition, you may need to use a beefier power supply if the external storage device is a mechanical drive. Programming it to record video while running inference at the same time would be really cool too, as then it could be smart dashcam of sorts!
 
+Traffic signs are often slanted, especially in New England, where the signs posts often get pressure from the snow from plows. While the OCR can handle slight slants, [text skew correction](https://www.pyimagesearch.com/2017/02/20/text-skew-correction-opencv-python/) could improve accuracy.
+
 Although I like the aesthetic of the 7-segment display, it gets washed out easily from sunlight. An e-ink display would likely look much better. You could put more information on an e-ink display too!
+
+While mounting the prototype on the dashboard is convenient, it may not be the best location. Mounting the prototype somewhere else would likely prevent the sun from beaming on the heatsink. While my prototype never overheated, it's something to think about. Due to airbags, the dashboard isn't the safest place to mount the prototype.
 
 ## Thanks!
 
