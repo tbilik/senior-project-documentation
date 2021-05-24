@@ -426,6 +426,6 @@ While mounting the prototype on the dashboard is convenient, it may not be the b
 
 ## Thanks!
 
-A quick thank you to Amy Bewley, Scott Bilik, Claire Bilik, and anyone else who helped me with the project. And thank you to reading all the way down this far! 
+A quick thank you to Amy Bewley, Scott Bilik, Claire Bilik, and anyone else who helped me with the project. And thank you for reading all the way down this far! 
 
 ![Ron Paul Gif](ronpaul.gif)
