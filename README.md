@@ -414,6 +414,7 @@ In practice, my prototype works poorly. The camera I use has mediocre focus and 
 ![cam](camera-1.png)
 ![cam](camera-2.png)
 ![cam](camera-3.png)
+![cam](camera-4.png)
 
 Having some recorded video footage from the camera could also be useful, as it could be used as training data for the object detection model and OCR. You would likely need an external storage device to record video footage. In addition, you may need to use a beefier power supply if the external storage device is a mechanical drive. Programming it to record video while running inference at the same time would be really cool too, as then it could be smart dashcam of sorts!
 
